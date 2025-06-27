@@ -18,6 +18,15 @@ const io = new Server(server, {
 
 const rooms = new Map();
 
+const emitRoomStats = (roomId) => {
+  const users = Array.from(rooms.get(roomId) || []);
+  io.to(roomId).emit('roomStats', {
+    roomId,
+    userCount: users.length,
+    activeUsers: users
+  });
+};
+
 io.on('connection', (socket) => {
   // console.log('A user connected:', socket.id);
 
@@ -47,7 +56,7 @@ io.on('connection', (socket) => {
       timestamp: Date.now(),
     });
 
-    io.to(roomId).emit('roomUsers', Array.from(rooms.get(roomId)));
+    emitRoomStats(roomId);
   });
 
   socket.on('chatMessage', (msg) => {
@@ -60,6 +69,13 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+  });
+
+  socket.on('userLeft', (data) => {
+    if (rooms.has(data.roomId)) {
+      rooms.get(data.roomId).delete(data.username);
+      emitRoomStats(data.roomId);
+    }
   });
 });
 
