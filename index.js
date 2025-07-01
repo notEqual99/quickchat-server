@@ -17,6 +17,7 @@ const io = new Server(server, {
 });
 
 const rooms = new Map();
+const userSockets = new Map();
 
 const emitRoomStats = (roomId) => {
   const users = Array.from(rooms.get(roomId) || []);
@@ -25,6 +26,26 @@ const emitRoomStats = (roomId) => {
     userCount: users.length,
     activeUsers: users
   });
+};
+
+const removeUserFromRoom = (socketId, username, roomId) => {
+  if (rooms.has(roomId)) {
+    rooms.get(roomId).delete(username);
+    
+    if (rooms.get(roomId).size === 0) {
+      rooms.delete(roomId);
+    } else {
+      io.to(roomId).emit('message', {
+        username: 'System',
+        text: `${username} has left the room`,
+        timestamp: Date.now(),
+      });
+
+      emitRoomStats(roomId);
+    }
+  }
+
+  userSockets.delete(socketId);
 };
 
 io.on('connection', (socket) => {
@@ -38,6 +59,8 @@ io.on('connection', (socket) => {
     }
 
     socket.join(roomId);
+
+    userSockets.set(socket.id, { username, roomId });
     
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Set());
@@ -67,15 +90,26 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+  socket.on('leaveRoom', ({ username, roomId }) => {
+    // console.log(`User ${username} leaving room ${roomId}`);
+    socket.leave(roomId);
+    removeUserFromRoom(socket.id, username, roomId);
+  });
+
+  // Handle disconnection
+  socket.on('disconnect', (reason) => {
+    // console.log('User disconnected:', socket.id, 'Reason:', reason);
+    
+    const userInfo = userSockets.get(socket.id);
+    if (userInfo) {
+      const { username, roomId } = userInfo;
+      removeUserFromRoom(socket.id, username, roomId);
+    }
   });
 
   socket.on('userLeft', (data) => {
-    if (rooms.has(data.roomId)) {
-      rooms.get(data.roomId).delete(data.username);
-      emitRoomStats(data.roomId);
-    }
+    // console.log(`User ${data.username} explicitly left room ${data.roomId}`);
+    removeUserFromRoom(socket.id, data.username, data.roomId);
   });
 });
 
