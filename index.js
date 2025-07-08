@@ -51,10 +51,38 @@ const removeUserFromRoom = (socketId, username, roomId) => {
 io.on('connection', (socket) => {
   // console.log('A user connected:', socket.id);
 
+  socket.on('validateUsername', ({ username, roomId }) => {
+    const roomNumber = parseInt(roomId);
+    if (isNaN(roomNumber) || roomNumber < 1 || roomNumber > 9999) {
+      socket.emit('usernameValidation', { 
+        valid: false, 
+        error: 'Invalid room number' 
+      });
+      return;
+    }
+
+    if (rooms.has(roomId) && rooms.get(roomId).has(username)) {
+      socket.emit('usernameValidation', { 
+        valid: false, 
+        error: 'Username already taken in this room' 
+      });
+      return;
+    }
+
+    socket.emit('usernameValidation', { 
+      valid: true 
+    });
+  });
+
   socket.on('joinRoom', ({ username, roomId }) => {
     const roomNumber = parseInt(roomId);
     if (isNaN(roomNumber) || roomNumber < 1 || roomNumber > 9999) {
       socket.emit('error', 'Invalid room number');
+      return;
+    }
+
+    if (rooms.has(roomId) && rooms.get(roomId).has(username)) {
+      socket.emit('error', 'Username already taken in this room');
       return;
     }
 
